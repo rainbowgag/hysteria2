@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Hysteria 2 无域名 + UDP 端口跳跃(20000-30000 -> 443) 一键安装
+# Hysteria 2 无域名 + UDP 端口跳跃(20000-50000 -> 443) 一键安装
 # 用法:
 #   bash hysteria2-porthop-setup.sh
 # 可选环境变量:
@@ -9,20 +9,31 @@ set -euo pipefail
 #   HY2_PASSWORD   Hysteria 认证密码(留空则自动生成)
 #   HY2_OBFS_PASSWORD Salamander 混淆密码(留空则自动生成)
 #   HY2_NAME       节点名称(默认 Hysteria2-PortHop)
-#   HY2_RANGE      跳跃端口范围(默认 20000-30000)
+#   HY2_RANGE      跳跃端口范围(默认 20000-50000)
 #   HY2_LISTEN     服务端监听端口(默认 443)
+#   HY2_HOP_INTERVAL 端口跳跃间隔秒数(默认 20)
 
 if [[ ${EUID} -ne 0 ]]; then
   echo "请用 root 运行: sudo bash $0" >&2
   exit 1
 fi
 
-HY2_RANGE="${HY2_RANGE:-20000-30000}"
+HY2_RANGE="${HY2_RANGE:-20000-50000}"
 HY2_LISTEN="${HY2_LISTEN:-443}"
+HY2_HOP_INTERVAL="${HY2_HOP_INTERVAL:-20}"
 HY2_PASSWORD="${HY2_PASSWORD:-}"
 HY2_OBFS_PASSWORD="${HY2_OBFS_PASSWORD:-}"
 HY2_NAME="${HY2_NAME:-Hysteria2-PortHop}"
 HY2_IPT_RANGE="${HY2_RANGE//-/:}"
+
+if ! [[ "${HY2_HOP_INTERVAL}" =~ ^[0-9]+$ ]]; then
+  echo "HY2_HOP_INTERVAL 必须是整数秒" >&2
+  exit 1
+fi
+if (( HY2_HOP_INTERVAL < 5 )); then
+  echo "HY2_HOP_INTERVAL 不能小于 5 秒" >&2
+  exit 1
+fi
 
 if [[ -z "${HY2_PASSWORD}" ]]; then
   HY2_PASSWORD="$(openssl rand -hex 16)"
@@ -106,8 +117,8 @@ systemctl restart hysteria-server.service
 sleep 2
 systemctl --no-pager --lines=20 status hysteria-server.service || true
 
-LINK="hysteria2://${HY2_PASSWORD}@${HY2_IP}:${HY2_LISTEN}/?sni=${HY2_IP}&alpn=h3&obfs=salamander&obfs-password=${HY2_OBFS_PASSWORD}&insecure=1&pinSHA256=${PIN_SHA256}&mport=${HY2_RANGE}#${HY2_NAME}"
-CLASH_NODE="- {name: ${HY2_NAME}, server: ${HY2_IP}, port: ${HY2_LISTEN}, alpn: [h3], obfs: salamander, obfs-password: ${HY2_OBFS_PASSWORD}, password: ${HY2_PASSWORD}, skip-cert-verify: true, sni: ${HY2_IP}, type: hysteria2}"
+LINK="hysteria2://${HY2_PASSWORD}@${HY2_IP}:${HY2_LISTEN}/?sni=${HY2_IP}&alpn=h3&obfs=salamander&obfs-password=${HY2_OBFS_PASSWORD}&insecure=1&pinSHA256=${PIN_SHA256}&mport=${HY2_RANGE}&mportHopInt=${HY2_HOP_INTERVAL}#${HY2_NAME}"
+CLASH_NODE="- {name: ${HY2_NAME}, server: ${HY2_IP}, port: ${HY2_LISTEN}, ports: \"${HY2_RANGE}\", hop-interval: ${HY2_HOP_INTERVAL}, alpn: [h3], obfs: salamander, obfs-password: ${HY2_OBFS_PASSWORD}, password: ${HY2_PASSWORD}, skip-cert-verify: true, sni: ${HY2_IP}, type: hysteria2}"
 
 echo "==> 保存节点信息并安装 hy01 管理命令"
 mkdir -p /etc/hysteria
@@ -120,6 +131,7 @@ HY2_OBFS_PASSWORD="${HY2_OBFS_PASSWORD}"
 HY2_PIN="${PIN_SHA256}"
 HY2_NAME="${HY2_NAME}"
 HY2_IPT_RANGE="${HY2_IPT_RANGE}"
+HY2_HOP_INTERVAL="${HY2_HOP_INTERVAL}"
 EOF
 chmod 600 /etc/hysteria/hy2-node.env
 
@@ -139,11 +151,12 @@ if [[ ! -f "${STATE_FILE}" ]]; then
 fi
 # shellcheck disable=SC1090
 source "${STATE_FILE}"
+HY2_HOP_INTERVAL="${HY2_HOP_INTERVAL:-20}"
 
 show_links() {
   local v2rayn_link clash_node
-  v2rayn_link="hysteria2://${HY2_PASSWORD}@${HY2_IP}:${HY2_LISTEN}/?sni=${HY2_IP}&alpn=h3&obfs=salamander&obfs-password=${HY2_OBFS_PASSWORD}&insecure=1&pinSHA256=${HY2_PIN}&mport=${HY2_RANGE}#${HY2_NAME}"
-  clash_node="- {name: ${HY2_NAME}, server: ${HY2_IP}, port: ${HY2_LISTEN}, alpn: [h3], obfs: salamander, obfs-password: ${HY2_OBFS_PASSWORD}, password: ${HY2_PASSWORD}, skip-cert-verify: true, sni: ${HY2_IP}, type: hysteria2}"
+  v2rayn_link="hysteria2://${HY2_PASSWORD}@${HY2_IP}:${HY2_LISTEN}/?sni=${HY2_IP}&alpn=h3&obfs=salamander&obfs-password=${HY2_OBFS_PASSWORD}&insecure=1&pinSHA256=${HY2_PIN}&mport=${HY2_RANGE}&mportHopInt=${HY2_HOP_INTERVAL}#${HY2_NAME}"
+  clash_node="- {name: ${HY2_NAME}, server: ${HY2_IP}, port: ${HY2_LISTEN}, ports: \"${HY2_RANGE}\", hop-interval: ${HY2_HOP_INTERVAL}, alpn: [h3], obfs: salamander, obfs-password: ${HY2_OBFS_PASSWORD}, password: ${HY2_PASSWORD}, skip-cert-verify: true, sni: ${HY2_IP}, type: hysteria2}"
   echo
   echo "v2rayN 节点链接:"
   echo "${v2rayn_link}"
@@ -190,6 +203,7 @@ echo " 安装完成"
 echo " 公网 IP : ${HY2_IP}"
 echo " 监听端口: ${HY2_LISTEN}"
 echo " 跳跃范围: ${HY2_RANGE}"
+echo " 跳跃间隔: ${HY2_HOP_INTERVAL}s"
 echo " 认证密码: ${HY2_PASSWORD}"
 echo " 混淆密码: ${HY2_OBFS_PASSWORD}"
 echo " 节点名称: ${HY2_NAME}"

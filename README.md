@@ -1,6 +1,6 @@
 # Hysteria 2 无域名端口跳跃一键脚本
 
-无需域名，使用自签名证书，Hysteria 2 服务端监听 `443`，并通过 iptables 把 UDP `20000-30000` 端口范围转发到 `443`。
+无需域名，使用自签名证书，Hysteria 2 服务端监听 `443`，并通过 iptables 把 UDP `20000-50000` 端口范围转发到 `443`。
 
 脚本会自动生成认证密码、Salamander 混淆密码和 v2rayN 可用的 Hysteria 2 分享链接。
 
@@ -22,8 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/rainbowgag/hysteria2/main/hysteria2
 HY2_IP=1.2.3.4 \
 HY2_PASSWORD=你的密码 \
 HY2_OBFS_PASSWORD=你的混淆密码 \
-HY2_RANGE=20000-30000 \
+HY2_RANGE=20000-50000 \
 HY2_LISTEN=443 \
+HY2_HOP_INTERVAL=20 \
 bash hysteria2-porthop-setup.sh
 ```
 
@@ -31,12 +32,15 @@ bash hysteria2-porthop-setup.sh
 - `HY2_PASSWORD`：Hysteria 认证密码，留空自动生成。
 - `HY2_OBFS_PASSWORD`：Salamander 混淆密码，留空自动生成。
 - `HY2_NAME`：节点名称，默认 `Hysteria2-PortHop`。
-- `HY2_RANGE`：UDP 端口跳跃范围，默认 `20000-30000`。
+- `HY2_RANGE`：UDP 端口跳跃范围，默认 `20000-50000`。
 - `HY2_LISTEN`：Hysteria 服务端监听端口，默认 `443`。
+- `HY2_HOP_INTERVAL`：端口跳跃间隔秒数，默认 `20`，最小 `5`。
 
 ## v2rayN 链接说明
 
-脚本输出的链接使用数字端口 `443` 作为节点端口，并通过 `mport` 参数携带端口跳跃范围。v2rayN 无法解析类似 `hysteria2://...:20000-30000` 的链接，因此必须使用这种格式。
+脚本输出的链接使用数字端口 `443` 作为节点端口，并通过 `mport` 参数携带端口跳跃范围、通过 `mportHopInt` 参数携带跳跃间隔。v2rayN 无法解析类似 `hysteria2://...:20000-50000` 的链接，因此必须使用这种格式。
+
+Clash 节点输出会使用 `ports` 和 `hop-interval` 字段，让 Clash Meta / Mihomo 也能按相同范围和时间间隔做端口跳跃。
 
 安装完成后，脚本会同时输出 v2rayN 节点链接和 Clash 节点格式，并安装管理命令 `hy01`。
 
